@@ -6,16 +6,20 @@ import { Web3ProviderEngine } from '@0x/dev-utils';
 import { RfqOrder, Signature } from '@0x/protocol-utils';
 import { BigNumber } from '@0x/utils';
 import { Web3Wrapper } from '@0x/web3-wrapper';
+import { providers, Wallet } from 'ethers';
 import 'mocha';
 
 import { PROTOCOL_FEE_MULTIPLIER } from '../src/config';
 import { RfqBlockchainUtils } from '../src/utils/rfq_blockchain_utils';
 
 import {
+    ETHEREUM_RPC_URL,
     getProvider,
     MATCHA_AFFILIATE_ADDRESS,
     TEST_RFQ_ORDER_FILLED_EVENT_LOG,
     TEST_RFQ_ORDER_FILLED_EVENT_TAKER_AMOUNT,
+    WORKER_TEST_ADDRESS,
+    WORKER_TEST_PRIVATE_KEY,
 } from './constants';
 import { setupDependenciesAsync, teardownDependenciesAsync } from './utils/deployment';
 
@@ -124,7 +128,10 @@ describe(SUITE_NAME, () => {
         await takerToken.mint(takerAmount).awaitTransactionSuccessAsync({ from: taker });
         await takerToken.approve(zeroEx.address, takerAmount).awaitTransactionSuccessAsync({ from: taker });
 
-        rfqBlockchainUtils = new RfqBlockchainUtils(provider, zeroEx.address);
+        const ethersProvider = new providers.JsonRpcProvider(ETHEREUM_RPC_URL);
+        const ethersWallet = new Wallet(WORKER_TEST_PRIVATE_KEY, ethersProvider);
+
+        rfqBlockchainUtils = new RfqBlockchainUtils(provider, zeroEx.address, ethersWallet);
     });
 
     after(async () => {
@@ -270,6 +277,38 @@ describe(SUITE_NAME, () => {
             });
 
             expect(txHash).to.match(/^0x[0-9a-fA-F]+/);
+        });
+    });
+    describe('signTransactionRequestAsync', () => {
+        it('matches the transaction hash from web3wrapper', async () => {
+            const metaTx = rfqBlockchainUtils.generateMetaTransaction(rfqOrder, orderSig, taker, takerAmount, CHAIN_ID);
+            const metaTxSig = await metaTx.getSignatureWithProviderAsync(provider);
+
+            const callData = rfqBlockchainUtils.generateMetaTransactionCallData(
+                metaTx,
+                metaTxSig,
+                MATCHA_AFFILIATE_ADDRESS,
+            );
+
+            const nonce = await rfqBlockchainUtils.getNonceAsync(WORKER_TEST_ADDRESS);
+
+            const transactionRequest = await rfqBlockchainUtils.transformTxDataToTransactionRequestAsync(
+                {
+                    gasPrice: new BigNumber(1e9),
+                    gas: new BigNumber(200000),
+                    value: 0,
+                    nonce,
+                },
+                CHAIN_ID,
+                callData,
+            );
+
+            const { signedTransaction, transactionHash: preSubmitHash } = await rfqBlockchainUtils.signTransactionAsync(
+                transactionRequest,
+            );
+            const web3SubmitHash = await rfqBlockchainUtils.submitSignedTransactionAsync(signedTransaction);
+
+            expect(preSubmitHash).to.equal(web3SubmitHash);
         });
     });
     describe('getTakerTokenFillAmountFromMetaTxCallData', () => {
