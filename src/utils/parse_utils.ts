@@ -1,6 +1,5 @@
 import { assert } from '@0x/assert';
 import { AffiliateFeeType, ERC20BridgeSource } from '@0x/asset-swapper';
-import express from 'express';
 
 import { NULL_ADDRESS } from '../constants';
 import { ValidationError, ValidationErrorCodes, ValidationErrorReasons } from '../errors';
@@ -193,10 +192,10 @@ export const parseUtils = {
         }
         return field;
     },
-    parseAffiliateFeeOptions(req: express.Request): AffiliateFee {
-        const { feeRecipient } = req.query;
-        const sellTokenPercentageFee = Number.parseFloat(req.query.sellTokenPercentageFee as string) || 0;
-        const buyTokenPercentageFee = Number.parseFloat(req.query.buyTokenPercentageFee as string) || 0;
+    parseAffiliateFeeOptions(params: any): AffiliateFee {
+        const { feeRecipient } = params;
+        const sellTokenPercentageFee = Number.parseFloat(params.sellTokenPercentageFee as string) || 0;
+        const buyTokenPercentageFee = Number.parseFloat(params.buyTokenPercentageFee as string) || 0;
         if (sellTokenPercentageFee > 0) {
             throw new ValidationError([
                 {
@@ -216,7 +215,7 @@ export const parseUtils = {
             ]);
         }
         let feeType = AffiliateFeeType.None;
-        if (req.query.feeType === FeeParamTypes.POSITIVE_SLIPPAGE) {
+        if (params.feeType === FeeParamTypes.POSITIVE_SLIPPAGE) {
             feeType = AffiliateFeeType.PositiveSlippageFee;
         } else if (buyTokenPercentageFee > 0) {
             feeType = AffiliateFeeType.PercentageFee;

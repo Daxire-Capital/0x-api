@@ -1,6 +1,6 @@
 // tslint:disable:max-file-line-count
 import { isAPIError, isRevertError } from '@0x/api-utils';
-import { ERC20BridgeSource, RfqRequestOpts, SwapQuoterError } from '@0x/asset-swapper';
+import { ERC20BridgeSource, SwapQuoterError } from '@0x/asset-swapper';
 import {
     NATIVE_FEE_TOKEN_BY_CHAIN_ID,
     SELL_SOURCE_FILTER_BY_CHAIN_ID,
@@ -21,8 +21,6 @@ import { Counter, Histogram } from 'prom-client';
 
 import {
     CHAIN_ID,
-    getIntegratorIdForApiKey,
-    MATCHA_INTEGRATOR_ID,
     NATIVE_WRAPPED_TOKEN_SYMBOL,
     PLP_API_KEY_WHITELIST,
     RFQT_API_KEY_WHITELIST,
@@ -44,7 +42,6 @@ import {
     ValidationErrorCodes,
     ValidationErrorReasons,
 } from '../errors';
-import { schemas } from '../schemas';
 import { SwapService } from '../services/swap_service';
 import { GetSwapPriceResponse, GetSwapQuoteParams, GetSwapQuoteResponse } from '../types';
 import { findTokenAddressOrThrowApiError } from '../utils/address_utils';
@@ -52,7 +49,6 @@ import { paginationUtils } from '../utils/pagination_utils';
 import { parseUtils } from '../utils/parse_utils';
 import { priceComparisonUtils } from '../utils/price_comparison_utils';
 import { quoteReportUtils } from '../utils/quote_report_utils';
-import { schemaUtils } from '../utils/schema_utils';
 import { serviceUtils } from '../utils/service_utils';
 
 const BEARER_REGEX = /^Bearer\s(.{36})$/;
@@ -133,12 +129,12 @@ export class SwapHandlers {
         res.status(HttpStatus.OK).send(tokenPrices);
     }
 
-    public async getQuoteAsync(req: express.Request, res: express.Response): Promise<void> {
+    public async getQuoteAsync(params: GetSwapQuoteParams): Promise<Pick<any, any>> {
+        params = parseSwapQuoteRequestParams(params, 'quote');
         const begin = Date.now();
-        const params = parseSwapQuoteRequestParams(req, 'quote');
-        const quote = await this._getSwapQuoteAsync(params, req);
+        const quote = await this._getSwapQuoteAsync(params);
         if (params.rfqt !== undefined) {
-            req.log.info({
+            console.info({
                 firmQuoteServed: {
                     taker: params.takerAddress,
                     // TODO (MKR-123): remove once the log consumers have been updated
@@ -164,7 +160,6 @@ export class SwapHandlers {
                         sellAmount: params.sellAmount,
                         apiKey: params.integratorId, // TODO (rhinodavid): update to align apiKey/integratorId
                     },
-                    req.log,
                 );
             }
         }
@@ -184,14 +179,15 @@ export class SwapHandlers {
         }
         const duration = (new Date().getTime() - begin) / ONE_SECOND_MS;
         HTTP_SWAP_RESPONSE_TIME.observe(duration);
-        res.status(HttpStatus.OK).send(response);
+
+        return response;
     }
 
     // tslint:disable-next-line:prefer-function-over-method
-    public async getQuotePriceAsync(req: express.Request, res: express.Response): Promise<void> {
-        const params = parseSwapQuoteRequestParams(req, 'price');
-        const quote = await this._getSwapQuoteAsync({ ...params, skipValidation: true }, req);
-        req.log.info({
+    public async getQuotePriceAsync(params: GetSwapQuoteParams): Promise<GetSwapPriceResponse> {
+        params = parseSwapQuoteRequestParams(params, 'price');
+        const quote = await this._getSwapQuoteAsync({ ...params, skipValidation: true });
+        console.info({
             indicativeQuoteServed: {
                 taker: params.takerAddress,
                 // TODO (MKR-123): remove once the log source is updated
@@ -232,7 +228,8 @@ export class SwapHandlers {
                 .getPriceComparisonFromQuote(CHAIN_ID, marketSide, quote)
                 ?.map((sc) => priceComparisonUtils.renameNative(sc));
         }
-        res.status(HttpStatus.OK).send(response);
+
+        return response;
     }
 
     public async getMarketDepthAsync(req: express.Request, res: express.Response): Promise<void> {
@@ -274,7 +271,7 @@ export class SwapHandlers {
         res.status(HttpStatus.OK).send(response);
     }
 
-    private async _getSwapQuoteAsync(params: GetSwapQuoteParams, req: express.Request): Promise<GetSwapQuoteResponse> {
+    private async _getSwapQuoteAsync(params: GetSwapQuoteParams): Promise<GetSwapQuoteResponse> {
         try {
             let swapQuote: GetSwapQuoteResponse;
             if (params.isUnwrap) {
@@ -317,42 +314,30 @@ export class SwapHandlers {
                     },
                 ]);
             }
-            req.log.info('Uncaught error', e.message, e.stack);
+            console.error('Uncaught error', e.message, e.stack);
             throw new InternalServerError(e.message);
         }
     }
 }
 
-const parseSwapQuoteRequestParams = (req: express.Request, endpoint: 'price' | 'quote'): GetSwapQuoteParams => {
+const parseSwapQuoteRequestParams = (params: any, endpoint: 'price' | 'quote'): GetSwapQuoteParams => {
     // HACK typescript typing does not allow this valid json-schema
-    schemaUtils.validateSchema(req.query, schemas.swapQuoteRequestSchema as any);
-    const apiKey: string | undefined = req.header('0x-api-key');
-    let integratorId: string | undefined;
-    if (apiKey) {
-        integratorId = getIntegratorIdForApiKey(apiKey);
-    }
 
     // Parse string params
-    const { takerAddress, affiliateAddress } = req.query;
+    const { takerAddress, affiliateAddress } = params;
 
     // Parse boolean params and defaults
     // tslint:disable:boolean-naming
-    let skipValidation: boolean;
-    skipValidation = req.query.skipValidation === undefined ? false : req.query.skipValidation === 'true';
-    if (endpoint === 'quote' && integratorId !== undefined && integratorId === MATCHA_INTEGRATOR_ID) {
-        // NOTE: force skip validation to false if the quote comes from Matcha
-        // NOTE: allow skip validation param if the quote comes from unknown integrators (without API keys or Simbot)
-        skipValidation = false;
-    }
-    const includePriceComparisons = req.query.includePriceComparisons === 'true' ? true : false;
+    const skipValidation: boolean = true;
+    const includePriceComparisons = params.includePriceComparisons === 'true' ? true : false;
     // Whether the entire callers balance should be sold, used for contracts where the
     // amount available is non-deterministic
-    const shouldSellEntireBalance = req.query.shouldSellEntireBalance === 'true' ? true : false;
+    const shouldSellEntireBalance = params.shouldSellEntireBalance === 'true' ? true : false;
     // tslint:enable:boolean-naming
 
     // Parse tokens and eth wrap/unwraps
-    const sellTokenRaw = req.query.sellToken as string;
-    const buyTokenRaw = req.query.buyToken as string;
+    const sellTokenRaw = params.sellToken as string;
+    const buyTokenRaw = params.buyToken as string;
     const isNativeSell = isNativeSymbolOrAddress(sellTokenRaw, CHAIN_ID);
     const isNativeBuy = isNativeSymbolOrAddress(buyTokenRaw, CHAIN_ID);
     // NOTE: Internally all Native token (like ETH) trades are for their wrapped equivalent (ie WETH), we just wrap/unwrap automatically
@@ -394,13 +379,13 @@ const parseSwapQuoteRequestParams = (req: express.Request, endpoint: 'price' | '
     }
 
     // Parse number params
-    const sellAmount = req.query.sellAmount === undefined ? undefined : new BigNumber(req.query.sellAmount as string);
-    const buyAmount = req.query.buyAmount === undefined ? undefined : new BigNumber(req.query.buyAmount as string);
-    const gasPrice = req.query.gasPrice === undefined ? undefined : new BigNumber(req.query.gasPrice as string);
+    const sellAmount = params.sellAmount === undefined ? undefined : new BigNumber(params.sellAmount as string);
+    const buyAmount = params.buyAmount === undefined ? undefined : new BigNumber(params.buyAmount as string);
+    const gasPrice = params.gasPrice === undefined ? undefined : new BigNumber(params.gasPrice as string);
     const slippagePercentage =
-        req.query.slippagePercentage === undefined
+        params.slippagePercentage === undefined
             ? DEFAULT_QUOTE_SLIPPAGE_PERCENTAGE
-            : Number.parseFloat(req.query.slippagePercentage as string);
+            : Number.parseFloat(params.slippagePercentage as string);
     if (slippagePercentage > 1) {
         throw new ValidationError([
             {
@@ -415,11 +400,11 @@ const parseSwapQuoteRequestParams = (req: express.Request, endpoint: 'price' | '
     // tslint:disable-next-line: boolean-naming
     const { excludedSources, includedSources, nativeExclusivelyRFQT } = parseUtils.parseRequestForExcludedSources(
         {
-            excludedSources: req.query.excludedSources as string | undefined,
-            includedSources: req.query.includedSources as string | undefined,
-            intentOnFilling: req.query.intentOnFilling as string | undefined,
+            excludedSources: params.excludedSources as string | undefined,
+            includedSources: params.includedSources as string | undefined,
+            intentOnFilling: params.intentOnFilling as string | undefined,
             takerAddress: takerAddress as string,
-            apiKey,
+            apiKey: undefined,
         },
         RFQT_API_KEY_WHITELIST,
         endpoint,
@@ -429,7 +414,7 @@ const parseSwapQuoteRequestParams = (req: express.Request, endpoint: 'price' | '
     // if an API key is not present, or the API key is ineligible for PLP.
     const updatedExcludedSources = serviceUtils.determineExcludedSources(
         excludedSources,
-        apiKey,
+        undefined,
         PLP_API_KEY_WHITELIST,
     );
 
@@ -445,37 +430,18 @@ const parseSwapQuoteRequestParams = (req: express.Request, endpoint: 'price' | '
     }
 
     // Log the request if it passes all validations
-    req.log.info({
+    console.info({
         type: 'swapRequest',
         endpoint,
         updatedExcludedSources,
         nativeExclusivelyRFQT,
         // TODO (MKR-123): Remove once the log source has been updated.
-        apiKey: integratorId || 'N/A',
-        integratorId: integratorId || 'N/A',
-        rawApiKey: apiKey || 'N/A',
+        apiKey: 'N/A',
+        integratorId: 'N/A',
+        rawApiKey: 'N/A',
     });
 
-    const rfqt: Pick<RfqRequestOpts, 'intentOnFilling' | 'isIndicative' | 'nativeExclusivelyRFQ'> | undefined = (() => {
-        if (apiKey) {
-            if (endpoint === 'quote' && takerAddress) {
-                return {
-                    intentOnFilling: req.query.intentOnFilling === 'true',
-                    isIndicative: false,
-                    nativeExclusivelyRFQT,
-                };
-            } else if (endpoint === 'price') {
-                return {
-                    intentOnFilling: false,
-                    isIndicative: true,
-                    nativeExclusivelyRFQT,
-                };
-            }
-        }
-        return undefined;
-    })();
-
-    const affiliateFee = parseUtils.parseAffiliateFeeOptions(req);
+    const affiliateFee = parseUtils.parseAffiliateFeeOptions(params);
 
     return {
         takerAddress: takerAddress as string,
@@ -488,10 +454,10 @@ const parseSwapQuoteRequestParams = (req: express.Request, endpoint: 'price' | '
         excludedSources: updatedExcludedSources,
         includedSources,
         affiliateAddress: affiliateAddress as string,
-        rfqt,
+        rfqt: undefined,
         skipValidation,
-        apiKey,
-        integratorId,
+        apiKey: undefined,
+        integratorId: undefined,
         affiliateFee,
         includePriceComparisons,
         shouldSellEntireBalance,
