@@ -22,11 +22,20 @@ export function createSwapRouter(swapService: SwapService): express.Router {
             }
         });
 
-        Nats.subscribe(`0x:price`, async (message, stringCodec) => {
+        // Nats.subscribe(`0x:price`, async (message, stringCodec) => {
+        //     try {
+        //         message.respond(stringCodec.encode(JSON.stringify(await handlers.getQuotePriceAsync(JSON.parse(message.data.toString())))));
+        //     } catch (e) {
+        //         console.error('Failed to get price');
+        //         console.error(e);
+        //     }
+        // });
+
+        Nats.subscribe(`0x:prices`, async (message, stringCodec) => {
             try {
-                message.respond(stringCodec.encode(JSON.stringify(await handlers.getQuotePriceAsync(JSON.parse(message.data.toString())))));
+                message.respond(stringCodec.encode(JSON.stringify(await handlers.getTokenPricesAsync(JSON.parse(message.data.toString())))));
             } catch (e) {
-                console.error('Failed to get price');
+                console.error('Failed to get prices');
                 console.error(e);
             }
         });
@@ -35,7 +44,7 @@ export function createSwapRouter(swapService: SwapService): express.Router {
     router.get('', asyncHandler(SwapHandlers.root.bind(SwapHandlers)));
     router.get('/tokens', asyncHandler(SwapHandlers.getTokens.bind(handlers)));
     router.get('/rfq/registry', asyncHandler(SwapHandlers.getRfqRegistry.bind(handlers)));
-    router.get('/prices', asyncHandler(handlers.getTokenPricesAsync.bind(handlers)));
+    // router.get('/prices', asyncHandler(handlers.getTokenPricesAsync.bind(handlers)));
     // router.get('/quote', asyncHandler(handlers.getQuoteAsync.bind(handlers)));
     // router.get('/price', asyncHandler(handlers.getQuotePriceAsync.bind(handlers)));
     router.get('/depth', asyncHandler(handlers.getMarketDepthAsync.bind(handlers)));

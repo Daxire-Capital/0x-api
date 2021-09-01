@@ -1,5 +1,3 @@
-import * as express from 'express';
-
 import { MAX_PER_PAGE } from '../config';
 import { DEFAULT_PAGE, DEFAULT_PER_PAGE } from '../constants';
 import { ValidationError, ValidationErrorCodes } from '../errors';
@@ -34,9 +32,9 @@ export const paginationUtils = {
         };
         return paginated;
     },
-    parsePaginationConfig: (req: express.Request): { page: number; perPage: number } => {
-        const page = req.query.page === undefined ? DEFAULT_PAGE : Number(req.query.page);
-        const perPage = req.query.perPage === undefined ? DEFAULT_PER_PAGE : Number(req.query.perPage);
+    parsePaginationConfig: (params: any): { page: number; perPage: number } => {
+        const page = params.page === undefined ? DEFAULT_PAGE : Number(params.page);
+        const perPage = params.perPage === undefined ? DEFAULT_PER_PAGE : Number(params.perPage);
         if (perPage > MAX_PER_PAGE) {
             throw new ValidationError([
                 {

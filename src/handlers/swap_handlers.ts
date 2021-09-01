@@ -12,7 +12,7 @@ import {
     isNativeWrappedSymbolOrAddress,
     TokenMetadatasForChains,
 } from '@0x/token-metadata';
-import { MarketOperation } from '@0x/types';
+import { MarketOperation, PaginatedCollection } from '@0x/types';
 import { BigNumber, NULL_ADDRESS } from '@0x/utils';
 import * as express from 'express';
 import * as HttpStatus from 'http-status-codes';
@@ -43,7 +43,7 @@ import {
     ValidationErrorReasons,
 } from '../errors';
 import { SwapService } from '../services/swap_service';
-import { GetSwapPriceResponse, GetSwapQuoteParams, GetSwapQuoteResponse } from '../types';
+import { GetSwapPriceResponse, GetSwapQuoteParams, GetSwapQuoteResponse, Price } from '../types';
 import { findTokenAddressOrThrowApiError } from '../utils/address_utils';
 import { paginationUtils } from '../utils/pagination_utils';
 import { parseUtils } from '../utils/parse_utils';
@@ -111,8 +111,8 @@ export class SwapHandlers {
         this._swapService = swapService;
     }
 
-    public async getTokenPricesAsync(req: express.Request, res: express.Response): Promise<void> {
-        const symbolOrAddress = (req.query.sellToken as string) || 'WETH';
+    public async getTokenPricesAsync(params: any): Promise<PaginatedCollection<Price>> {
+        const symbolOrAddress = (params.sellToken as string) || 'WETH';
         const baseAsset = getTokenMetadataIfExists(symbolOrAddress, CHAIN_ID);
         if (!baseAsset) {
             throw new ValidationError([
@@ -123,10 +123,11 @@ export class SwapHandlers {
                 },
             ]);
         }
-        const { page, perPage } = paginationUtils.parsePaginationConfig(req);
+        const { page, perPage } = paginationUtils.parsePaginationConfig(params);
         const unitAmount = new BigNumber(1);
         const tokenPrices = await this._swapService.getTokenPricesAsync(baseAsset, unitAmount, page, perPage);
-        res.status(HttpStatus.OK).send(tokenPrices);
+        
+        return tokenPrices;
     }
 
     public async getQuoteAsync(params: GetSwapQuoteParams): Promise<Pick<any, any>> {
