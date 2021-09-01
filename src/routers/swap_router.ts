@@ -22,14 +22,14 @@ export function createSwapRouter(swapService: SwapService): express.Router {
             }
         });
 
-        // Nats.subscribe(`0x:price`, async (message, stringCodec) => {
-        //     try {
-        //         message.respond(stringCodec.encode(JSON.stringify(await handlers.getQuotePriceAsync(JSON.parse(message.data.toString())))));
-        //     } catch (e) {
-        //         console.error('Failed to get price');
-        //         console.error(e);
-        //     }
-        // });
+        Nats.subscribe(`0x:price`, async (message, stringCodec) => {
+            try {
+                message.respond(stringCodec.encode(JSON.stringify(await handlers.getQuotePriceAsync(JSON.parse(message.data.toString())))));
+            } catch (e) {
+                console.error('Failed to get price');
+                console.error(e);
+            }
+        });
 
         Nats.subscribe(`0x:prices`, async (message, stringCodec) => {
             try {
