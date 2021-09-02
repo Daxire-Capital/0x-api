@@ -17,6 +17,7 @@ export function createSwapRouter(swapService: SwapService): express.Router {
             handlers.getQuoteAsync(JSON.parse(message.data.toString())).then(response => {
                 message.respond(stringCodec.encode(JSON.stringify(response)));
             }).catch(e => {
+                console.error(e);
                 message.respond(stringCodec.encode(JSON.stringify(e)));
             });
         });
