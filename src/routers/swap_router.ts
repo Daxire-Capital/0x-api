@@ -19,6 +19,7 @@ export function createSwapRouter(swapService: SwapService): express.Router {
             } catch (e) {
                 console.error('Failed to get quote response');
                 console.error(e);
+                message.respond(stringCodec.encode(JSON.stringify(e)));
             }
         });
 
@@ -28,6 +29,7 @@ export function createSwapRouter(swapService: SwapService): express.Router {
             } catch (e) {
                 console.error('Failed to get price');
                 console.error(e);
+                message.respond(stringCodec.encode(JSON.stringify(e)));
             }
         });
 
@@ -37,6 +39,7 @@ export function createSwapRouter(swapService: SwapService): express.Router {
             } catch (e) {
                 console.error('Failed to get prices');
                 console.error(e);
+                message.respond(stringCodec.encode(JSON.stringify(e)));
             }
         });
     }).catch(error => console.error(error));
