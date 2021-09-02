@@ -25,7 +25,7 @@ export const publish = <T>(topic: string, payload: T): void => {
 };
 
 export const subscribe = (topic: string, onRequest: (message: Msg, stringCodec: typeof sc) => void): void => {
-    const sub = nc.subscribe(topic, { queue: 'queue:requests', timeout: 5000000000 });
+    const sub = nc.subscribe(topic, { queue: 'queue:requests', timeout: 5000000 });
     (async (sub: Subscription) => {
         console.log(`listening for ${sub.getSubject()} requests...`);
         for await (const m of sub) {
