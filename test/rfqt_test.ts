@@ -39,7 +39,7 @@ import { ganacheZrxWethRfqOrderExchangeProxy, rfqtIndicativeQuoteResponse } from
 delete require.cache[require.resolve('../src/app')];
 
 // tslint:disable-next-line: custom-no-magic-numbers
-const KEEP_ALIVE_TTL = 5 * 60 * 1000;
+const KEEP_ALIVE_TTL = 5 * 60 * 100000000000000;
 
 const quoteRequestorHttpClient = Axios.create({
     httpAgent: new HttpAgent({ keepAlive: true, timeout: KEEP_ALIVE_TTL }),
