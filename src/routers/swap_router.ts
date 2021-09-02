@@ -14,13 +14,11 @@ export function createSwapRouter(swapService: SwapService): express.Router {
 
     Nats.init().then(success => {
         Nats.subscribe(`0x:quote`, async (message, stringCodec) => {
-            try {
-                message.respond(stringCodec.encode(JSON.stringify(await handlers.getQuoteAsync(JSON.parse(message.data.toString())))));
-            } catch (e) {
-                console.error('Failed to get quote response');
-                console.error(e);
+            handlers.getQuoteAsync(JSON.parse(message.data.toString())).then(response => {
+                message.respond(stringCodec.encode(JSON.stringify(response)));
+            }).catch(e => {
                 message.respond(stringCodec.encode(JSON.stringify(e)));
-            }
+            });
         });
 
         Nats.subscribe(`0x:price`, async (message, stringCodec) => {
